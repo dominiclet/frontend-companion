@@ -12,11 +12,21 @@ const toggleHandler = () => {
       });
 }
 
+const selectElementButtonHandler = () => {
+  chrome.tabs.query({}, tabs => {
+    tabs.forEach(tab => {
+      chrome.tabs.sendMessage(tab.id, {
+        type: "select-element",
+      });
+    });
+  });
+}
+
 const refreshContentScripts = () => {
   chrome.tabs.query({}, tabs => {
     tabs.forEach(tab => {
       chrome.tabs.sendMessage(tab.id, {
-        "type": "refresh-content-script",
+        type: "refresh-content-script",
       });
     });
   });
@@ -29,4 +39,6 @@ const refreshPopup = async () => {
 }
 
 refreshPopup();
+
 document.getElementById("toggle").addEventListener("click", toggleHandler);
+document.getElementById("select").addEventListener("click", selectElementButtonHandler);
