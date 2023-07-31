@@ -1,16 +1,18 @@
 import { State } from "./background";
+import { getElementByXPath, getXPathForElement } from "./util/xpath";
+
+const selectedElementsIdentifier: Set<string> = new Set<string>();
 
 const onPageStartOrChange = async () => {
-  const storage = await chrome.storage.local.get("isEnabled");
-  if (!storage.isEnabled) return;
-  highlightAllElements();
+  console.log(selectedElementsIdentifier);
+  if (selectedElementsIdentifier.size == 0) return;
+  highlightSelectedElements();
 }
 
-const highlightAllElements = () => {
-  const allElements = Array.from(document.getElementsByTagName("*") as HTMLCollectionOf<HTMLElement>);
-
-  allElements.forEach(element => {
-    element.style.border = "1px dashed red";
+const highlightSelectedElements = () => {
+  selectedElementsIdentifier.forEach(xpath => {
+    let elem = getElementByXPath(xpath) as HTMLElement;
+    highlightElement(elem);
   });
 }
 
@@ -43,6 +45,7 @@ const handleHoverElement = () => {
   }
 
   const unsubscribe = () => {
+    selectHoverDiv.remove();
     document.removeEventListener('mousemove', mousemoveEventListener);
     document.removeEventListener('click', clickEventListener);
   }
@@ -50,12 +53,24 @@ const handleHoverElement = () => {
   const clickEventListener = (e: MouseEvent) => {
     e.stopPropagation();
     const hoveredElement = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | undefined;
-    console.log(hoveredElement);
+    if (!hoveredElement) return;
+    // Add selected element to selected list
+    let xpath = getXPathForElement(hoveredElement);
+    selectedElementsIdentifier.add(xpath);
+
+    // Highlight element
+    highlightElement(hoveredElement);
+
     unsubscribe();
   }
 
   document.addEventListener('mousemove', mousemoveEventListener);
   document.addEventListener('click', clickEventListener);
+}
+
+// Highlights element
+const highlightElement = (element: HTMLElement) => {
+  element.style.outline = '1px dashed red';
 }
 
 chrome.runtime.onMessage.addListener(async (message) => {
@@ -64,7 +79,7 @@ chrome.runtime.onMessage.addListener(async (message) => {
     if (!storage.isEnabled) {
       location.reload();
     } else {
-      highlightAllElements();
+      highlightSelectedElements();
     }
   } else if (message.type == "select-element") {
     handleHoverElement();
