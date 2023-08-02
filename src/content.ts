@@ -1,18 +1,24 @@
 import { State } from "./background";
+import { pixelToNumber } from "./util/unit";
 import { getElementByXPath, getXPathForElement } from "./util/xpath";
 
-const selectedElementsIdentifier: Set<string> = new Set<string>();
+const ELEMENT_COLOR = "rgba(137, 196, 244, 0.3)";
+const PADDING_COLOR = "rgba(178, 222, 39, 0.3)";
+const MARGIN_COLOR = "rgba(251, 192, 147, 0.3)";
 
-const onPageStartOrChange = async () => {
-  console.log(selectedElementsIdentifier);
-  if (selectedElementsIdentifier.size == 0) return;
+const selectedElements: Map<string, DrawBoxElement[]> = new Map<string, DrawBoxElement[]>();
+
+const render = async () => {
+  if (selectedElements.size == 0) return;
   highlightSelectedElements();
 }
 
 const highlightSelectedElements = () => {
-  selectedElementsIdentifier.forEach(xpath => {
+  selectedElements.forEach((mountedElems, xpath) => {
     let elem = getElementByXPath(xpath) as HTMLElement;
-    highlightElement(elem);
+    mountedElems.forEach(elem => elem.remove());
+    let newMountedElems = highlightElement(elem);
+    selectedElements.set(xpath, newMountedElems);
   });
 }
 
@@ -52,15 +58,15 @@ const handleHoverElement = () => {
 
   const clickEventListener = (e: MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
     const hoveredElement = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | undefined;
     if (!hoveredElement) return;
     // Add selected element to selected list
     let xpath = getXPathForElement(hoveredElement);
-    selectedElementsIdentifier.add(xpath);
 
     // Highlight element
-    highlightElement(hoveredElement);
-
+    let mountedElems = highlightElement(hoveredElement);
+    selectedElements.set(xpath, mountedElems);
     unsubscribe();
   }
 
@@ -70,7 +76,64 @@ const handleHoverElement = () => {
 
 // Highlights element
 const highlightElement = (element: HTMLElement) => {
-  element.style.outline = '1px dashed red';
+  // Draw initial box element
+  const elementRect = element.getBoundingClientRect();
+  const elementStyle = window.getComputedStyle(element);
+  let left = elementRect.left + pixelToNumber(elementStyle.paddingLeft) + window.scrollX;
+  let top = elementRect.top + pixelToNumber(elementStyle.paddingTop) + window.scrollY;
+  let width = elementRect.width - pixelToNumber(elementStyle.paddingLeft) - pixelToNumber(elementStyle.paddingRight);
+  let height = elementRect.height - pixelToNumber(elementStyle.paddingBottom) - pixelToNumber(elementStyle.paddingTop);
+  const elementBoxDiv = drawBox(left, top, width, height, 9999, ELEMENT_COLOR);
+
+  // Draw padding box
+  left = elementRect.left + window.scrollX;
+  top = elementRect.top + window.scrollY;
+  width = elementRect.width;
+  height = elementRect.height;
+  const paddingBoxDiv = drawBox(left, top, width, height, 10000, PADDING_COLOR);
+
+  // Draw margin box
+  left = elementRect.left - pixelToNumber(elementStyle.marginLeft) + window.scrollX;
+  top = elementRect.top - pixelToNumber(elementStyle.marginTop) + window.scrollY;
+  width = elementRect.width + pixelToNumber(elementStyle.marginLeft) + pixelToNumber(elementStyle.marginRight);
+  height = elementRect.height + pixelToNumber(elementStyle.marginTop) + pixelToNumber(elementStyle.marginBottom);
+  const marginBoxDiv = drawBox(left, top, width, height, 10001, MARGIN_COLOR);
+
+
+  return [...elementBoxDiv, ...paddingBoxDiv, ...marginBoxDiv];
+}
+
+type DrawBoxElement = HTMLDivElement | HTMLSpanElement;
+
+const drawBox = (left: number, top: number, width: number, height: number, zIndex: number, color: string): DrawBoxElement[] => {
+  const div = document.createElement("div");
+  const style = div.style;
+  style.position = "absolute";
+  style.backgroundColor = color;
+  style.opacity = "0.5";
+  style.zIndex = `${zIndex}`;
+  style.pointerEvents = "none";
+  style.display = "block";
+  style.left = `${left}px`;
+  style.top = `${top}px`;
+  style.width = `${width}px`;
+  style.height = `${height}px`;
+
+  document.body.appendChild(div);
+
+  const span = document.createElement("span");
+  span.innerText = `${width} x ${height}`
+  const spanStyle = span.style;
+  spanStyle.fontSize = "10px";
+  spanStyle.color = "grey";
+  spanStyle.pointerEvents = "none";
+  spanStyle.left = `${left}px`;
+  spanStyle.top = `${top}px`;
+  spanStyle.position = "absolute";
+  spanStyle.display = "block";
+
+  document.body.appendChild(span);
+  return [div, span];
 }
 
 chrome.runtime.onMessage.addListener(async (message) => {
@@ -86,5 +149,5 @@ chrome.runtime.onMessage.addListener(async (message) => {
   }
 });
 
-onPageStartOrChange();
-setInterval(onPageStartOrChange, 3000);
+render();
+setInterval(render, 1500);
